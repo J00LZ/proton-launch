@@ -1,4 +1,4 @@
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
 use clap::{Args, ValueEnum};
 
@@ -32,10 +32,9 @@ impl Runnable for MoveCompat {
     fn run(&self, paths: &Paths, _steam_data: &SteamData) -> RunnableResult<()> {
         let save_name = self
             .save_name
-            .as_ref()
-            .map(|s| s.as_str())
+            .as_deref()
             .unwrap_or_else(|| self.exe.file_stem().unwrap().to_str().unwrap());
-        let global_compat_dir = paths.data_dir.join(save_name);
+        let global_compat_dir = paths.compat_dir(save_name);
         let local_compat_dir = self.exe.parent().unwrap().join("compat");
         println!("global exists: {}", global_compat_dir.exists());
         println!("local exists: {}", local_compat_dir.exists());
@@ -62,14 +61,14 @@ impl Runnable for MoveCompat {
 }
 
 fn copy_file_tree(source: &Path, dest: &Path) -> Result<(), std::io::Error> {
-    std::fs::create_dir_all(&dest)?;
-    for entry in walkdir::WalkDir::new(&source) {
+    std::fs::create_dir_all(dest)?;
+    for entry in walkdir::WalkDir::new(source) {
         let entry = entry?;
-        let path = entry.path().strip_prefix(&source).unwrap();
+        let path = entry.path().strip_prefix(source).unwrap();
         if entry.file_type().is_dir() {
             std::fs::create_dir_all(&dest.join(path))?;
         } else if entry.file_type().is_file() {
-            std::fs::copy(&entry.path(), &dest.join(path))?;
+            std::fs::copy(entry.path(), &dest.join(path))?;
         }
     }
 

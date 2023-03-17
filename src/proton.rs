@@ -108,13 +108,7 @@ impl ProtonVersion {
     }
 
     pub fn best_installed(steam: &SteamData) -> Option<Self> {
-        for proton in Self::all() {
-            if proton.is_installed(steam) {
-                return Some(proton);
-            }
-        }
-
-        None
+        Self::all().into_iter().find(|p| p.is_installed(steam))
     }
 
     pub fn is_installed(&self, steam: &SteamData) -> bool {

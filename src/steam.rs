@@ -13,7 +13,7 @@ pub enum SteamDataError {
     #[error("IO error: {0}")]
     IOError(#[from] std::io::Error),
     #[error("VDF parse error: {0}")]
-    KVParser(#[from] keyvalues_parser::error::Error),
+    KVParser(#[from] Box<keyvalues_parser::error::Error>),
 }
 
 type SteamResult<T> = Result<T, SteamDataError>;
@@ -46,7 +46,7 @@ impl SteamData {
             self.library_folders = LibraryFolders::from_vdf(&content)?;
             Ok(())
         } else {
-            return Err(SteamDataError::NoLibraryFolders);
+            Err(SteamDataError::NoLibraryFolders)
         }
     }
 
@@ -92,7 +92,7 @@ impl LibraryFolders {
     const EMPTY: Self = Self(Vec::new());
 
     pub fn from_vdf(vdf: &str) -> SteamResult<Self> {
-        let vdf = Vdf::parse(vdf)?.value;
+        let vdf = Vdf::parse(vdf).map_err(Box::new)?.value;
         let obj = vdf.get_obj().ok_or(SteamDataError::NoLibraryFolders)?;
 
         let folders: Vec<_> = obj
@@ -103,11 +103,10 @@ impl LibraryFolders {
                 let library_folder_string = lfo.get("path")?.get(0)?.get_str()?.to_string();
                 let apps = lfo
                     .get("apps")?
-                    .into_iter()
+                    .iter()
                     .flat_map(|v| v.get_obj())
                     .flat_map(|o| o.keys())
-                    .map(|k| k.parse::<u64>().ok())
-                    .flatten()
+                    .filter_map(|k| k.parse::<u64>().ok())
                     .collect::<Vec<_>>();
                 let library_folder = PathBuf::from(library_folder_string).join("steamapps");
                 Some(LibraryFolder {

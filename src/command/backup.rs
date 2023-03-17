@@ -26,10 +26,9 @@ impl Runnable for Backup {
     fn run(&self, paths: &Paths, _steam_data: &SteamData) -> RunnableResult<()> {
         let save_name = self
             .save_name
-            .as_ref()
-            .map(|s| s.as_str())
+            .as_deref()
             .unwrap_or_else(|| self.exe.file_stem().unwrap().to_str().unwrap());
-        let global_compat_dir = paths.data_dir.join(save_name);
+        let global_compat_dir = paths.compat_dir(save_name);
         let r = find_new_files(&global_compat_dir).unwrap();
         let f = File::create(format!("{}.backup", save_name)).unwrap();
         let mut zip = zip::ZipWriter::new(f);

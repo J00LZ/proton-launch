@@ -13,7 +13,7 @@ pub struct Info {
 impl Runnable for Info {
     fn run(&self, _paths: &Paths, steam_data: &SteamData) -> RunnableResult<()> {
         let protons = if let Some(version) = self.version {
-            vec![version.clone()]
+            vec![version]
         } else {
             ProtonVersion::all()
         };
