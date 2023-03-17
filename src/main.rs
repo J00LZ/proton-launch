@@ -1,33 +1,49 @@
-use std::{fmt::Display, path::PathBuf};
+use std::{
+    collections::HashSet,
+    fs::File,
+    path::{Path, PathBuf},
+};
 
-use clap::{builder::PossibleValue, Parser, Subcommand, ValueEnum};
-use steamlocate::SteamDir;
-use xdg::BaseDirectories;
+use clap::{Parser, Subcommand, ValueEnum};
 
-#[derive(Debug, Clone)]
-struct Paths {
-    data_dir: PathBuf,
-    config_dir: PathBuf,
-}
+mod paths;
+mod proton;
+mod steam;
 
-impl Default for Paths {
-    fn default() -> Self {
-        let basedirs = BaseDirectories::new().unwrap();
-        let data_dir = basedirs.create_data_directory("proton-launch").unwrap();
-        let config_dir = basedirs.create_config_directory("proton-launch").unwrap();
-        Self {
-            data_dir,
-            config_dir,
-        }
-    }
-}
+use paths::Paths;
+use proton::ProtonVersion;
+use zip::write::FileOptions;
+
+use crate::steam::SteamData;
 
 #[derive(Parser)]
-#[command(name = "Proton-Launch")]
+#[command(name = "proton-launch")]
 #[command(author = "Julius de Jeu")]
 struct ProtonLaunch {
     #[command(subcommand)]
     command: ProtonCommand,
+
+    #[command(flatten)]
+    paths: Paths,
+
+    /// Path to the steam install folder.
+    /// If not specified, will try to find it in the default steam locations.
+    /// (It has to contain a steamapps folder)
+    #[arg(long, short)]
+    steam_path: Option<PathBuf>,
+
+    /// Use local compat folder instead of the global one
+    /// This is useful if you want to keep the game files locally
+    #[arg(long, short, default_value_t)]
+    local: bool,
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+enum MoveDirection {
+    /// Move the compat folder from the global save folder to a local folder named `compat`
+    GlobalToLocal,
+    /// Move the compat folder from the local `compat` folder to the global save folder
+    LocalToGlobal,
 }
 
 #[derive(Subcommand)]
@@ -35,7 +51,7 @@ enum ProtonCommand {
     /// Run a game with proton
     Run {
         /// Path to the game exe to run
-        game: PathBuf,
+        exe: PathBuf,
 
         /// Optional save name to use
         /// If not specified, the game exe without the extension will be used
@@ -45,133 +61,277 @@ enum ProtonCommand {
         /// Optional proton version to use
         #[clap(short, long)]
         proton: Option<ProtonVersion>,
+
+        /// If specified, will not add .exe to the filename provided
+        #[clap(long)]
+        raw: bool,
+    },
+
+    /// Create a compat folder for a game
+    MoveCompat {
+        /// Direction to move the compat folder
+        direction: MoveDirection,
+
+        /// Path to the game exe
+        exe: PathBuf,
+
+        /// Optional save name to use
+        /// If not specified, the game exe without the extension will be used
+        #[clap(short, long)]
+        save_name: Option<String>,
+    },
+
+    /// Get newly added files in the compat folder
+    Backup {
+        /// Path to the game exe
+        exe: PathBuf,
+
+        /// Optional save name to use
+        /// If not specified, the game exe without the extension will be used
+        #[clap(short, long)]
+        save_name: Option<String>,
+    },
+
+    /// Restore files from a backup
+    Restore {
+        /// Path to the .backup file
+        backup: PathBuf,
+
+        /// Optional save name to use
+        /// If not specified, the game exe without the extension will be used
+        #[clap(short, long)]
+        save_name: Option<String>,
+    },
+
+    /// Install a proton version, will do nothing if it's already installed
+    /// (or well that's what Steam seems to do)
+    Install {
+        /// Proton version to install. You probably want one of the first entries in the list
+        ///
+        version: ProtonVersion,
+    },
+
+    /// Uninstall a proton version, will do nothing if it's not installed
+    /// (or well that's what Steam seems to do)
+    Uninstall {
+        /// Proton version to uninstall.  
+        version: ProtonVersion,
+    },
+
+    /// Get info about a proton version, or all versions if no version is specified
+    Info {
+        /// Proton version to get info about
+        version: Option<ProtonVersion>,
     },
 }
 
 fn main() {
     let pl = ProtonLaunch::parse();
+    let paths = &pl.paths;
+    let steam_data = pl
+        .steam_path
+        .map_or_else(|| SteamData::new(), SteamData::new_with_path)
+        .unwrap();
 
-}
+    let command = &pl.command;
+    match command {
+        ProtonCommand::Run {
+            exe,
+            save_name,
+            proton,
+            raw,
+        } => {
+            let selected_proton = proton.filter(|p| p.is_installed(&steam_data));
+            if let Some(handpicked) = proton {
+                if !selected_proton.is_some() {
+                    println!("Proton version {} is not installed, you can install it with `proton-launch install {}`", handpicked, handpicked.arg_name());
+                }
+            }
+            let selected_proton =
+                selected_proton.or_else(|| ProtonVersion::best_installed(&steam_data));
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum ProtonVersion {
-    Proton37,
-    Proton37Beta,
-    Proton316,
-    Proton316Beta,
-    Proton42,
-    Proton411,
-    Proton50,
-    Proton513,
-    Proton63,
-    Proton70,
-    ProtonBattlEyeRuntime,
-    ProtonEasyAntiCheatRuntime,
-    ProtonExperimental,
-}
+            if let Some(selected) = selected_proton {
+                let save_name = save_name.as_ref().map(|s| s.as_str()).unwrap_or_else(|| {
+                    if *raw {
+                        exe.file_name().unwrap().to_str().unwrap()
+                    } else {
+                        exe.file_stem().unwrap().to_str().unwrap()
+                    }
+                });
+                let proton_path = selected.get_path(&steam_data).expect("You somehow managed to delete the selected proton version while running this command");
+                let proton_command = proton_path.join("proton");
+                println!("Launching {} with {}", exe.display(), selected);
 
-impl ValueEnum for ProtonVersion {
-    fn value_variants<'a>() -> &'a [Self] {
-        &[
-            ProtonVersion::Proton37,
-            ProtonVersion::Proton37Beta,
-            ProtonVersion::Proton316,
-            ProtonVersion::Proton316Beta,
-            ProtonVersion::Proton42,
-            ProtonVersion::Proton411,
-            ProtonVersion::Proton50,
-            ProtonVersion::Proton513,
-            ProtonVersion::Proton63,
-            ProtonVersion::Proton70,
-            ProtonVersion::ProtonBattlEyeRuntime,
-            ProtonVersion::ProtonEasyAntiCheatRuntime,
-            ProtonVersion::ProtonExperimental,
-        ]
-    }
+                let compat_dir = paths.data_dir.join(save_name);
+                std::fs::create_dir_all(&compat_dir).unwrap();
 
-    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
-        let n = format!("{:?}", self);
-        // hide all but installed proton versions
-        let v = PossibleValue::new(n.to_lowercase()).hide(!self.is_installed().unwrap_or_default());
-        Some(v)
-    }
-}
+                let mut command = std::process::Command::new(proton_command);
+                command.env("STEAM_COMPAT_CLIENT_INSTALL_PATH", steam_data.path);
+                command.env("STEAM_COMPAT_DATA_PATH", compat_dir);
+                command.arg("run");
+                command.arg(exe);
 
-impl Display for ProtonVersion {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ProtonVersion::Proton37 => write!(f, "Proton 3.7"),
-            ProtonVersion::Proton37Beta => write!(f, "Proton 3.7 Beta"),
-            ProtonVersion::Proton316 => write!(f, "Proton 3.16"),
-            ProtonVersion::Proton316Beta => write!(f, "Proton 3.16 Beta"),
-            ProtonVersion::Proton42 => write!(f, "Proton 4.2"),
-            ProtonVersion::Proton411 => write!(f, "Proton 4.11"),
-            ProtonVersion::Proton50 => write!(f, "Proton 5.0"),
-            ProtonVersion::Proton513 => write!(f, "Proton 5.13"),
-            ProtonVersion::Proton63 => write!(f, "Proton 6.3"),
-            ProtonVersion::Proton70 => write!(f, "Proton 7.0"),
-            ProtonVersion::ProtonBattlEyeRuntime => write!(f, "Proton BattlEye Runtime"),
-            ProtonVersion::ProtonEasyAntiCheatRuntime => write!(f, "Proton EasyAntiCheat Runtime"),
-            ProtonVersion::ProtonExperimental => write!(f, "Proton Experimental"),
+                let res = command.spawn().unwrap().wait().unwrap();
+                println!("{}", res);
+            } else {
+                println!(
+                    "No proton found, you can install one with `proton-launch install <version>`"
+                );
+            }
+        }
+        ProtonCommand::MoveCompat {
+            direction,
+            exe,
+            save_name,
+        } => {
+            let save_name = save_name
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or_else(|| exe.file_stem().unwrap().to_str().unwrap());
+            let global_compat_dir = paths.data_dir.join(save_name);
+            let local_compat_dir = exe.parent().unwrap().join("compat");
+            println!("global exists: {}", global_compat_dir.exists());
+            println!("local exists: {}", local_compat_dir.exists());
+            match direction {
+                MoveDirection::GlobalToLocal => {
+                    println!(
+                        "Moving compat folder from {} to {}",
+                        global_compat_dir.display(),
+                        local_compat_dir.display()
+                    );
+                    copy_file_tree(&global_compat_dir, &local_compat_dir).unwrap();
+                }
+                MoveDirection::LocalToGlobal => {
+                    println!(
+                        "Moving compat folder from {} to {}",
+                        local_compat_dir.display(),
+                        global_compat_dir.display()
+                    );
+                    copy_file_tree(&local_compat_dir, &global_compat_dir).unwrap();
+                }
+            }
+        }
+        ProtonCommand::Backup { exe, save_name } => {
+            let save_name = save_name
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or_else(|| exe.file_stem().unwrap().to_str().unwrap());
+            let global_compat_dir = paths.data_dir.join(save_name);
+            let r = find_new_files(&global_compat_dir).unwrap();
+            let f = File::create(format!("{}.backup", save_name)).unwrap();
+            let mut zip = zip::ZipWriter::new(f);
+            zip.set_comment(
+                format!("Made with proton-launch {}", env!("CARGO_PKG_VERSION")).as_str(),
+            );
+            for f in r {
+                let path = f
+                    .strip_prefix(&global_compat_dir)
+                    .unwrap()
+                    .to_string_lossy();
+                let meta = f.metadata().unwrap();
+                let last_modified = meta.modified().unwrap();
+                let offset_datetime = time::OffsetDateTime::from(last_modified);
+                let options =
+                    FileOptions::default().last_modified_time(offset_datetime.try_into().unwrap());
+                zip.start_file(path, options).unwrap();
+                let mut file = File::open(f).unwrap();
+                std::io::copy(&mut file, &mut zip).unwrap();
+            }
+            zip.finish().unwrap();
+        }
+        ProtonCommand::Restore { backup, save_name } => {
+            let save_name = save_name
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or_else(|| backup.file_stem().unwrap().to_str().unwrap());
+            let global_compat_dir = paths.data_dir.join(save_name);
+            let f = File::open(backup).unwrap();
+            let mut zip = zip::ZipArchive::new(f).unwrap();
+            for i in 0..zip.len() {
+                let mut file = zip.by_index(i).unwrap();
+                let outpath = global_compat_dir.join(
+                    file.enclosed_name()
+                        .map(Path::to_path_buf)
+                        .unwrap_or(file.mangled_name()),
+                );
+                if (&*file.name()).ends_with('/') {
+                    std::fs::create_dir_all(&outpath).unwrap();
+                } else {
+                    if let Some(p) = outpath.parent() {
+                        if !p.exists() {
+                            std::fs::create_dir_all(&p).unwrap();
+                        }
+                    }
+                    let mut outfile = File::create(&outpath).unwrap();
+                    std::io::copy(&mut file, &mut outfile).unwrap();
+                }
+            }
+        }
+        ProtonCommand::Install { version: proton } => {
+            let install_url = proton.install_url();
+            open::that(install_url).unwrap();
+        }
+        ProtonCommand::Uninstall { version: proton } => {
+            let uninstall_url = proton.uninstall_url();
+            open::that(uninstall_url).unwrap();
+        }
+        ProtonCommand::Info { version } => {
+            let protons = if let Some(version) = version {
+                vec![version.clone()]
+            } else {
+                ProtonVersion::all()
+            };
+            for p in protons {
+                println!("=== {} ===", p);
+                println!("Install url: {}", p.install_url());
+                println!("Uninstall url: {}", p.uninstall_url());
+                println!("App id: {}", p.get_appid());
+                let installed = steam_data.has_app(p.get_appid());
+                println!("Installed: {}", installed);
+                if installed {
+                    let path = steam_data.get_app_dir(p.get_appid());
+                    println!("Path: {:?}", path);
+                }
+                println!();
+            }
         }
     }
 }
 
-impl ProtonVersion {
-    fn get_appid(&self) -> u32 {
-        match self {
-            ProtonVersion::Proton37 => 858280,
-            ProtonVersion::Proton37Beta => 930400,
-            ProtonVersion::Proton316 => 961940,
-            ProtonVersion::Proton316Beta => 996510,
-            ProtonVersion::Proton42 => 1054830,
-            ProtonVersion::Proton411 => 1113280,
-            ProtonVersion::Proton50 => 1245040,
-            ProtonVersion::Proton513 => 1420170,
-            ProtonVersion::Proton63 => 1580130,
-            ProtonVersion::Proton70 => 1887720,
-            ProtonVersion::ProtonBattlEyeRuntime => 1161040,
-            ProtonVersion::ProtonEasyAntiCheatRuntime => 1826330,
-            ProtonVersion::ProtonExperimental => 1493710,
+fn copy_file_tree(source: &Path, dest: &Path) -> Result<(), std::io::Error> {
+    std::fs::create_dir_all(&dest)?;
+    for entry in walkdir::WalkDir::new(&source) {
+        let entry = entry?;
+        let path = entry.path().strip_prefix(&source).unwrap();
+        if entry.file_type().is_dir() {
+            std::fs::create_dir_all(&dest.join(path))?;
+        } else if entry.file_type().is_file() {
+            std::fs::copy(&entry.path(), &dest.join(path))?;
         }
     }
 
-    fn all_versions() -> Vec<ProtonVersion> {
-        vec![
-            ProtonVersion::ProtonBattlEyeRuntime,
-            ProtonVersion::ProtonEasyAntiCheatRuntime,
-            ProtonVersion::Proton37,
-            ProtonVersion::Proton37Beta,
-            ProtonVersion::Proton316,
-            ProtonVersion::Proton316Beta,
-            ProtonVersion::Proton42,
-            ProtonVersion::Proton411,
-            ProtonVersion::Proton50,
-            ProtonVersion::Proton513,
-            ProtonVersion::Proton63,
-            ProtonVersion::Proton70,
-            ProtonVersion::ProtonExperimental,
-        ]
-    }
+    Ok(())
+}
 
-    fn install_url(&self) -> String {
-        format!("steam://install/{}", self.get_appid())
-    }
+fn find_new_files(compat_dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut v = Vec::new();
+    let tracked_files = compat_dir.join("tracked_files");
+    let tracked_files = std::fs::read_to_string(tracked_files)?;
+    let tracked_files: HashSet<&str> = tracked_files.lines().collect();
+    let prefix = compat_dir.join("pfx");
 
-    fn is_installed(&self) -> Option<bool> {
-        let mut steam = SteamDir::locate()?;
-        let appid = self.get_appid();
-        if let Some(app) = steam.app(&appid) {
-            Some(app.path.exists())
-        } else {
-            Some(false)
+    for entry in walkdir::WalkDir::new(&prefix) {
+        let entry = entry?;
+        let path = entry.path();
+        if entry.file_type().is_file() {
+            let path = path.strip_prefix(&prefix).unwrap();
+            if !tracked_files.contains(path.to_str().unwrap())
+                && path.to_string_lossy().contains("users")
+            {
+                v.push(entry.path().to_path_buf());
+            }
         }
     }
 
-    fn first_available() -> Option<Self> {
-        let mut all = ProtonVersion::all_versions();
-        all.reverse();
-        all.into_iter()
-            .find(|v| v.is_installed().unwrap_or_default())
-    }
+    Ok(v)
 }
