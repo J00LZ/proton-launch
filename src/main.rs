@@ -2,15 +2,10 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
-mod command;
-mod paths;
-mod proton;
-mod steam;
+use proton_launch::command::{ProtonCommand, Runnable};
+use proton_launch::paths::Paths;
 
-use command::{ProtonCommand, Runnable};
-use paths::Paths;
-
-use crate::steam::SteamData;
+use proton_launch::steam::SteamData;
 
 #[derive(Parser)]
 #[command(name = "proton-launch")]
