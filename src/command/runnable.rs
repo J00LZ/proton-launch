@@ -1,7 +1,6 @@
 use thiserror::Error;
 
-use crate::{proton::ProtonVersion, paths::Paths, steam::SteamData};
-
+use crate::{paths::Paths, proton::ProtonVersion, steam::SteamData};
 
 #[derive(Debug, Error)]
 pub enum RunnableError {

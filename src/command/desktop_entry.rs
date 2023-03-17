@@ -24,7 +24,7 @@ fn make_icon(exe: &Path, paths: &Paths, name: &str) -> PathBuf {
     let image = VecPE::from_disk_file(exe).unwrap();
     let res = ResourceDirectory::parse(&image).unwrap();
     let groups = res.icon_groups(&image).unwrap();
-    let v = groups.values().into_iter().next().unwrap();
+    let v = groups.values().next().unwrap();
     let buf = v.to_icon_buffer(&image).unwrap();
     let img = image::load_from_memory(buf.as_slice()).unwrap();
     let img = img.resize(256, 256, image::imageops::FilterType::Lanczos3);
@@ -37,22 +37,18 @@ impl Runnable for MakeDE {
     fn run(&self, paths: &Paths, _steam_data: &SteamData) -> RunnableResult<()> {
         let save_name = self
             .save_name
-            .as_ref()
-            .map(|s| s.as_str())
+            .as_deref()
             .unwrap_or_else(|| self.exe.file_stem().unwrap().to_str().unwrap());
         let mut de = DesktopEntry::new(self.name.clone());
         de.comment = format!("Run {} with Proton", self.name);
-        de.exec = format!(
-            "proton-launch run -s {save_name} {} ",
-            self.exe.display()
-        );
+        de.exec = format!("proton-launch run -s {save_name} {} ", self.exe.display());
         de.path = paths.run_dir(save_name).display().to_string();
         let icon_path = make_icon(&self.exe, paths, &self.name);
         de.icon = icon_path.display().to_string();
 
         {
             let mut f = File::create(paths.application_entry(&self.name)).unwrap();
-            write!(f, "[Desktop Entry]\n").unwrap();
+            writeln!(f, "[Desktop Entry]").unwrap();
             let mut s = serde_ini::Serializer::new(serde_ini::Writer::new(
                 &mut f,
                 serde_ini::LineEnding::Linefeed,

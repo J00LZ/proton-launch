@@ -23,22 +23,20 @@ pub struct Run {
 
 impl Runnable for Run {
     fn run(&self, paths: &Paths, steam_data: &SteamData) -> RunnableResult<()> {
-        let selected_proton = self.proton.filter(|p| p.is_installed(&steam_data));
+        let selected_proton = self.proton.filter(|p| p.is_installed(steam_data));
         if let Some(handpicked) = self.proton {
-            if !selected_proton.is_some() {
+            if selected_proton.is_none() {
                 return Err(RunnableError::SelectedProtonNotInstalled(handpicked));
             }
         }
-        let selected_proton =
-            selected_proton.or_else(|| ProtonVersion::best_installed(&steam_data));
+        let selected_proton = selected_proton.or_else(|| ProtonVersion::best_installed(steam_data));
 
         if let Some(selected) = selected_proton {
             let save_name = self
                 .save_name
-                .as_ref()
-                .map(|s| s.as_str())
+                .as_deref()
                 .unwrap_or_else(|| self.exe.file_stem().unwrap().to_str().unwrap());
-            let proton_path = selected.get_path(&steam_data).expect("You somehow managed to delete the selected proton version while running this command");
+            let proton_path = selected.get_path(steam_data).expect("You somehow managed to delete the selected proton version while running this command");
             let proton_command = proton_path.join("proton");
             println!("Launching {} with {}", self.exe.display(), selected);
 

@@ -1,4 +1,7 @@
-use std::{fs::File, path::{PathBuf, Path}};
+use std::{
+    fs::File,
+    path::{Path, PathBuf},
+};
 
 use clap::Args;
 
@@ -21,8 +24,7 @@ impl Runnable for Restore {
     fn run(&self, paths: &Paths, _steam_data: &SteamData) -> RunnableResult<()> {
         let save_name = self
             .save_name
-            .as_ref()
-            .map(|s| s.as_str())
+            .as_deref()
             .unwrap_or_else(|| self.backup.file_stem().unwrap().to_str().unwrap());
         let global_compat_dir = paths.compat_dir(save_name);
         let f = File::open(&self.backup).unwrap();
@@ -34,12 +36,12 @@ impl Runnable for Restore {
                     .map(Path::to_path_buf)
                     .unwrap_or(file.mangled_name()),
             );
-            if (&*file.name()).ends_with('/') {
+            if (*file.name()).ends_with('/') {
                 std::fs::create_dir_all(&outpath).unwrap();
             } else {
                 if let Some(p) = outpath.parent() {
                     if !p.exists() {
-                        std::fs::create_dir_all(&p).unwrap();
+                        std::fs::create_dir_all(p).unwrap();
                     }
                 }
                 let mut outfile = File::create(&outpath).unwrap();

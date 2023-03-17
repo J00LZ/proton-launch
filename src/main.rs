@@ -39,7 +39,7 @@ fn main() {
     let paths = &pl.paths;
     let steam_data = pl
         .steam_path
-        .map_or_else(|| SteamData::new(), SteamData::new_with_path)
+        .map_or_else(SteamData::new, SteamData::new_with_path)
         .unwrap();
 
     let command = &pl.command;

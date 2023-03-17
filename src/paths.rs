@@ -52,8 +52,7 @@ impl DataDir {
     pub fn icon_path(&self, app_id: &str) -> PathBuf {
         let icons_dir = self.0.join("icons");
         std::fs::create_dir_all(&icons_dir).unwrap();
-        let icons_dir = icons_dir.join(format!("{}.png", app_id));
-        icons_dir
+        icons_dir.join(format!("{}.png", app_id))
     }
 }
 
