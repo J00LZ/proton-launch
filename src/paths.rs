@@ -49,9 +49,10 @@ impl DataDir {
         run_dir
     }
 
-    pub fn icons_dir(&self) -> PathBuf {
+    pub fn icon_path(&self, app_id: &str) -> PathBuf {
         let icons_dir = self.0.join("icons");
         std::fs::create_dir_all(&icons_dir).unwrap();
+        let icons_dir = icons_dir.join(format!("{}.png", app_id));
         icons_dir
     }
 }
@@ -101,7 +102,6 @@ pub struct Paths {
     config_dir: ConfigDir,
 }
 
-
 impl Paths {
     pub fn compat_dir(&self, app_id: &str) -> PathBuf {
         self.data_dir.compat_dir(app_id)
@@ -111,7 +111,14 @@ impl Paths {
         self.data_dir.run_dir(app_id)
     }
 
-    pub fn icons_dir(&self) -> PathBuf {
-        self.data_dir.icons_dir()
+    pub fn icon_path(&self, app_id: &str) -> PathBuf {
+        self.data_dir.icon_path(app_id)
+    }
+
+    pub fn application_entry(&self, app_id: &str) -> PathBuf {
+        let mut path = dirs::data_dir().unwrap().join("applications");
+        std::fs::create_dir_all(&path).unwrap();
+        path.push(format!("proton-{}.desktop", app_id));
+        path
     }
 }

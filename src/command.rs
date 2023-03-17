@@ -6,13 +6,13 @@ mod runnable;
 pub use runnable::*;
 
 pub mod backup;
+pub mod desktop_entry;
 pub mod info;
 pub mod install;
 pub mod move_compat;
 pub mod restore;
 pub mod run;
 pub mod uninstall;
-pub mod desktop_entry;
 
 #[derive(Subcommand)]
 pub enum ProtonCommand {
@@ -38,6 +38,9 @@ pub enum ProtonCommand {
 
     /// Get info about a proton version, or all versions if no version is specified
     Info(info::Info),
+
+    /// Create a desktop entry for a game
+    DesktopEntry(desktop_entry::MakeDE),
 }
 
 impl Runnable for ProtonCommand {
@@ -50,6 +53,7 @@ impl Runnable for ProtonCommand {
             ProtonCommand::Install(i) => i.run(paths, steam_data),
             ProtonCommand::Uninstall(u) => u.run(paths, steam_data),
             ProtonCommand::Info(i) => i.run(paths, steam_data),
+            ProtonCommand::DesktopEntry(d) => d.run(paths, steam_data),
         }
     }
 }
