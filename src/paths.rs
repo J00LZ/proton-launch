@@ -36,6 +36,26 @@ impl Deref for DataDir {
     }
 }
 
+impl DataDir {
+    pub fn compat_dir(&self, app_id: &str) -> PathBuf {
+        let compat_dir = self.0.join("compat").join(app_id);
+        std::fs::create_dir_all(&compat_dir).unwrap();
+        compat_dir
+    }
+
+    pub fn run_dir(&self, app_id: &str) -> PathBuf {
+        let run_dir = self.0.join("run").join(app_id);
+        std::fs::create_dir_all(&run_dir).unwrap();
+        run_dir
+    }
+
+    pub fn icons_dir(&self) -> PathBuf {
+        let icons_dir = self.0.join("icons");
+        std::fs::create_dir_all(&icons_dir).unwrap();
+        icons_dir
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ConfigDir(PathBuf);
 
@@ -74,9 +94,24 @@ impl Deref for ConfigDir {
 pub struct Paths {
     /// The directory to store the `compat` folders in
     #[arg(short, long, default_value_t)]
-    pub data_dir: DataDir,
+    data_dir: DataDir,
     /// The directory to store the `proton-launch` config in.
     /// This is both Global and Game specific config
     #[arg(short, long, default_value_t)]
-    pub config_dir: ConfigDir,
+    config_dir: ConfigDir,
+}
+
+
+impl Paths {
+    pub fn compat_dir(&self, app_id: &str) -> PathBuf {
+        self.data_dir.compat_dir(app_id)
+    }
+
+    pub fn run_dir(&self, app_id: &str) -> PathBuf {
+        self.data_dir.run_dir(app_id)
+    }
+
+    pub fn icons_dir(&self) -> PathBuf {
+        self.data_dir.icons_dir()
+    }
 }

@@ -10,8 +10,12 @@ mod paths;
 mod proton;
 mod steam;
 
+use exe::{Buffer, ResourceDirectory, VecPE};
 use paths::Paths;
 use proton::ProtonVersion;
+
+use serde::{Deserialize, Serialize};
+use xdgkit::desktop_entry::string_xdg_type;
 use zip::write::FileOptions;
 
 use crate::steam::SteamData;
@@ -98,7 +102,7 @@ enum ProtonCommand {
         backup: PathBuf,
 
         /// Optional save name to use
-        /// If not specified, the game exe without the extension will be used
+        /// If not specified, the backup file without the extension will be used
         #[clap(short, long)]
         save_name: Option<String>,
     },
@@ -122,6 +126,16 @@ enum ProtonCommand {
     Info {
         /// Proton version to get info about
         version: Option<ProtonVersion>,
+    },
+
+    GetIcon {
+        exe: PathBuf,
+    },
+
+    DesktopEntry {
+        exe: PathBuf,
+        name: String,
+        save_name: Option<String>,
     },
 }
 
@@ -162,12 +176,12 @@ fn main() {
                 let proton_command = proton_path.join("proton");
                 println!("Launching {} with {}", exe.display(), selected);
 
-                let compat_dir = paths.data_dir.join(save_name);
-                std::fs::create_dir_all(&compat_dir).unwrap();
+                let compat_dir = paths.compat_dir(&save_name);
 
                 let mut command = std::process::Command::new(proton_command);
                 command.env("STEAM_COMPAT_CLIENT_INSTALL_PATH", steam_data.path);
                 command.env("STEAM_COMPAT_DATA_PATH", compat_dir);
+                command.current_dir(paths.run_dir(&save_name));
                 command.arg("run");
                 command.arg(exe);
 
@@ -188,7 +202,7 @@ fn main() {
                 .as_ref()
                 .map(|s| s.as_str())
                 .unwrap_or_else(|| exe.file_stem().unwrap().to_str().unwrap());
-            let global_compat_dir = paths.data_dir.join(save_name);
+            let global_compat_dir = paths.compat_dir(save_name);
             let local_compat_dir = exe.parent().unwrap().join("compat");
             println!("global exists: {}", global_compat_dir.exists());
             println!("local exists: {}", local_compat_dir.exists());
@@ -216,7 +230,7 @@ fn main() {
                 .as_ref()
                 .map(|s| s.as_str())
                 .unwrap_or_else(|| exe.file_stem().unwrap().to_str().unwrap());
-            let global_compat_dir = paths.data_dir.join(save_name);
+            let global_compat_dir = paths.compat_dir(&save_name);
             let r = find_new_files(&global_compat_dir).unwrap();
             let f = File::create(format!("{}.backup", save_name)).unwrap();
             let mut zip = zip::ZipWriter::new(f);
@@ -244,7 +258,7 @@ fn main() {
                 .as_ref()
                 .map(|s| s.as_str())
                 .unwrap_or_else(|| backup.file_stem().unwrap().to_str().unwrap());
-            let global_compat_dir = paths.data_dir.join(save_name);
+            let global_compat_dir = paths.compat_dir(save_name);
             let f = File::open(backup).unwrap();
             let mut zip = zip::ZipArchive::new(f).unwrap();
             for i in 0..zip.len() {
@@ -294,6 +308,71 @@ fn main() {
                 }
                 println!();
             }
+        }
+        ProtonCommand::GetIcon { exe } => {
+            let image = VecPE::from_disk_file(exe).unwrap();
+            let res = ResourceDirectory::parse(&image).unwrap();
+            let groups = res.icon_groups(&image).unwrap();
+            let v = groups.values().into_iter().next().unwrap();
+            let buf = v.to_icon_buffer(&image).unwrap();
+            let img = image::load_from_memory(buf.as_slice()).unwrap();
+            let img = img.resize(256, 256, image::imageops::FilterType::Lanczos3);
+            img.save("icon.png").unwrap();
+        }
+        ProtonCommand::DesktopEntry {
+            exe,
+            save_name,
+            name,
+        } => {
+            let save_name = save_name
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or_else(|| exe.file_stem().unwrap().to_str().unwrap());
+            // let mut de = DesktopEntry::default();
+            // de.exec = Some(format!("proton-launch run {}", exe.display()));
+            // de.name = Some(name.clone());
+            // de.comment = Some(format!("Run {} with Proton", name));
+            let mut de = DesktopEntry::new(name.clone());
+            de.comment = format!("Run {} with Proton", name);
+            de.exec = format!("proton-launch run {}", exe.display());
+            let de = de_to_string(&de);
+            println!("{}", de);
+
+        }
+    }
+}
+
+fn de_to_string(de: &DesktopEntry) -> String {
+    serde_ini::ser::to_string(de).unwrap()
+}
+
+#[derive(Default, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct DesktopEntry {
+    #[serde(rename = "Type")]
+    xdg_type: String,
+    version: String,
+    name: String,
+    comment: String,
+    exec: String,
+    path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    terminal: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    icon: Option<String>,
+}
+
+impl DesktopEntry {
+    fn new(name: impl ToString) -> Self {
+        Self {
+            xdg_type: "Application".to_string(),
+            version: "1.0".to_string(),
+            name: name.to_string(),
+            comment: "".to_string(),
+            icon: None,
+            exec: "".to_string(),
+            path: "".to_string(),
+            terminal: None,
         }
     }
 }
