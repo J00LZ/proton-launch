@@ -8,7 +8,7 @@ default-members = ["proton-launch-cli"]
 clap = { version = "4.1", features = ["derive", "string"] }
 
 [workspace.package]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Launch Windows games with Proton"
 license = "MIT"
