@@ -5,7 +5,6 @@ use std::{
     process::Command,
 };
 
-use clap::Args;
 use exe::{Buffer, ResourceDirectory, VecPE};
 use serde::{Deserialize, Serialize};
 
@@ -13,7 +12,8 @@ use crate::{paths::Paths, steam::SteamData};
 
 use super::{Runnable, RunnableResult};
 
-#[derive(Debug, Clone, Args)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "commandline", derive(clap::Args))]
 pub struct MakeDE {
     exe: PathBuf,
     name: String,

@@ -1,6 +1,6 @@
 use std::{fmt::Display, path::PathBuf};
 
-use clap::ValueEnum;
+
 
 use crate::steam::SteamData;
 
@@ -19,8 +19,8 @@ pub enum ProtonVersion {
     ProtonNext,
     ProtonExperimental,
 }
-
-impl ValueEnum for ProtonVersion {
+#[cfg(feature = "commandline")]
+impl clap::ValueEnum for ProtonVersion {
     fn value_variants<'a>() -> &'a [Self] {
         use ProtonVersion::*;
         &[

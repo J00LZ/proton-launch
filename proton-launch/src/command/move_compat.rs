@@ -1,12 +1,11 @@
 use std::path::{Path, PathBuf};
 
-use clap::{Args, ValueEnum};
-
 use crate::{paths::Paths, steam::SteamData};
 
 use super::{Runnable, RunnableResult};
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "commandline", derive(clap::ValueEnum))]
 enum MoveDirection {
     /// Move the compat folder from the global save folder to a local folder named `compat`
     GlobalToLocal,
@@ -14,7 +13,8 @@ enum MoveDirection {
     LocalToGlobal,
 }
 
-#[derive(Args, Debug, Clone)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "commandline", derive(clap::Args))]
 pub struct MoveCompat {
     /// Direction to move the compat folder
     direction: MoveDirection,
@@ -24,7 +24,7 @@ pub struct MoveCompat {
 
     /// Optional save name to use
     /// If not specified, the game exe without the extension will be used
-    #[clap(short, long)]
+    #[cfg_attr(feature = "commandline", clap(short, long))]
     save_name: Option<String>,
 }
 

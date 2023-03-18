@@ -1,30 +1,29 @@
 use std::path::PathBuf;
 
-use clap::Args;
-
 use crate::{paths::Paths, proton::ProtonVersion, steam::SteamData};
 
 use super::{Runnable, RunnableError, RunnableResult};
 
-#[derive(Args, Debug, Clone)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "commandline", derive(clap::Args))]
 pub struct Run {
     /// Path to the game exe to run
     exe: PathBuf,
 
     /// Optional save name to use
     /// If not specified, the game exe without the extension will be used
-    #[clap(short, long)]
+    #[cfg_attr(feature = "commandline", clap(short, long))]
     save_name: Option<String>,
 
     /// Optional proton version to use
-    #[clap(short, long)]
+    #[cfg_attr(feature = "commandline", clap(short, long))]
     proton: Option<ProtonVersion>,
 
     /// Run the game in the same directory as the exe.
     /// Some games need this since they use relative paths, this includes some Unity games.
     /// This does require write access to the game directory, since a dxvk cache will be created there.
     ///
-    #[clap(long)]
+    #[cfg_attr(feature = "commandline", clap(long))]
     here: bool,
 }
 

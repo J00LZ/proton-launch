@@ -4,21 +4,19 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use clap::Args;
-use zip::write::FileOptions;
-
 use crate::{paths::Paths, steam::SteamData};
 
 use super::{Runnable, RunnableResult};
 
-#[derive(Args, Debug, Clone)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "commandline", derive(clap::Args))]
 pub struct Backup {
     /// Path to the game exe
     exe: PathBuf,
 
     /// Optional save name to use
     /// If not specified, the game exe without the extension will be used
-    #[clap(short, long)]
+    #[cfg_attr(feature = "commandline", clap(short, long))]
     save_name: Option<String>,
 }
 
@@ -31,23 +29,13 @@ impl Runnable for Backup {
         let global_compat_dir = paths.compat_dir(save_name);
         let r = find_new_files(&global_compat_dir).unwrap();
         let f = File::create(format!("{}.backup", save_name)).unwrap();
-        let mut zip = zip::ZipWriter::new(f);
-        zip.set_comment(format!("Made with proton-launch {}", env!("CARGO_PKG_VERSION")).as_str());
+        let w = zstd::Encoder::new(f, 3).unwrap().auto_finish();
+        let mut t = tar::Builder::new(w);
         for f in r {
-            let path = f
-                .strip_prefix(&global_compat_dir)
-                .unwrap()
-                .to_string_lossy();
-            let meta = f.metadata().unwrap();
-            let last_modified = meta.modified().unwrap();
-            let offset_datetime = time::OffsetDateTime::from(last_modified);
-            let options =
-                FileOptions::default().last_modified_time(offset_datetime.try_into().unwrap());
-            zip.start_file(path, options).unwrap();
-            let mut file = File::open(f).unwrap();
-            std::io::copy(&mut file, &mut zip).unwrap();
+            let path = f.strip_prefix(&global_compat_dir).unwrap();
+            t.append_path_with_name(&f, path).unwrap();
         }
-        zip.finish().unwrap();
+        t.finish().unwrap();
         Ok(())
     }
 }

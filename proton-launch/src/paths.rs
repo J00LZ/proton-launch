@@ -1,6 +1,5 @@
 use std::{fmt::Display, ops::Deref, path::PathBuf, str::FromStr};
 
-use clap::Args;
 use xdg::BaseDirectories;
 
 #[derive(Debug, Clone)]
@@ -90,14 +89,15 @@ impl Deref for ConfigDir {
 }
 
 /// The data paths to be used by the application
-#[derive(Debug, Clone, Args, Default)]
+#[derive(Debug, Clone, Default)]
+#[cfg_attr(feature = "commandline", derive(clap::Args))]
 pub struct Paths {
     /// The directory to store the `compat` folders in
-    #[arg(short, long, default_value_t)]
+    #[cfg_attr(feature = "commandline", arg(short, long, default_value_t))]
     data_dir: DataDir,
     /// The directory to store the `proton-launch` config in.
     /// This is both Global and Game specific config
-    #[arg(short, long, default_value_t)]
+    #[cfg_attr(feature = "commandline", arg(short, long, default_value_t))]
     config_dir: ConfigDir,
 }
 
