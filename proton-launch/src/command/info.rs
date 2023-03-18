@@ -1,10 +1,9 @@
-use clap::Args;
-
 use crate::{paths::Paths, proton::ProtonVersion, steam::SteamData};
 
 use super::{Runnable, RunnableResult};
 
-#[derive(Args, Debug, Clone)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "commandline", derive(clap::Args))]
 pub struct Info {
     /// Proton version to get info for
     version: Option<ProtonVersion>,

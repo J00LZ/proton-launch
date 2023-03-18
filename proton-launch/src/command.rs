@@ -1,4 +1,3 @@
-use clap::Subcommand;
 
 use crate::{paths::Paths, steam::SteamData};
 
@@ -14,7 +13,7 @@ pub mod restore;
 pub mod run;
 pub mod uninstall;
 
-#[derive(Subcommand)]
+#[cfg_attr(feature = "commandline", derive(clap::Subcommand))]
 pub enum ProtonCommand {
     /// Run a game with proton
     Run(run::Run),

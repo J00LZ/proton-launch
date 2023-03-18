@@ -1,0 +1,16 @@
+[package]
+name = "proton-launch-cli"
+version.workspace = true
+description.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "proton-launch"
+path = "src/main.rs"
+
+
+[dependencies]
+clap.workspace = true
+proton-launch = { path = "../proton-launch", features = ["commandline"] }
