@@ -13,4 +13,6 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
-proton-launch = { path = "../proton-launch", features = ["commandline"] }
+proton-launch = { version = "0.1", path = "../proton-launch", features = [
+    "commandline",
+] }
