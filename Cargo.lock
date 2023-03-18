@@ -1004,7 +1004,7 @@ dependencies = [
 
 [[package]]
 name = "proton-launch"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "clap",
  "dirs",
@@ -1022,14 +1022,6 @@ dependencies = [
  "xdg",
  "zip",
  "zstd 0.12.3+zstd.1.5.2",
-]
-
-[[package]]
-name = "proton-launch-cli"
-version = "0.1.2"
-dependencies = [
- "clap",
- "proton-launch",
 ]
 
 [[package]]
