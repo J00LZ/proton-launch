@@ -1,6 +1,6 @@
 [package]
 name = "proton-launch"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Launch Windows games with Proton"
 license = "MIT"
@@ -9,6 +9,7 @@ license = "MIT"
 [[bin]]
 name = "proton-launch"
 path = "src/main.rs"
+required-features = ["commandline"]
 
 [dependencies]
 
