@@ -19,6 +19,13 @@ pub struct Run {
     /// Optional proton version to use
     #[clap(short, long)]
     proton: Option<ProtonVersion>,
+
+    /// Run the game in the same directory as the exe.
+    /// Some games need this since they use relative paths, this includes some Unity games.
+    /// This does require write access to the game directory, since a dxvk cache will be created there.
+    ///
+    #[clap(long)]
+    here: bool,
 }
 
 impl Runnable for Run {
@@ -41,11 +48,16 @@ impl Runnable for Run {
             println!("Launching {} with {}", self.exe.display(), selected);
 
             let compat_dir = paths.compat_dir(save_name);
+            let run_dir = if self.here {
+                self.exe.parent().unwrap().to_path_buf()
+            } else {
+                paths.run_dir(save_name)
+            };
 
             let mut command = std::process::Command::new(proton_command);
             command.env("STEAM_COMPAT_CLIENT_INSTALL_PATH", &steam_data.path);
             command.env("STEAM_COMPAT_DATA_PATH", compat_dir);
-            command.current_dir(paths.run_dir(save_name));
+            command.current_dir(run_dir);
             command.arg("run");
             command.arg(&self.exe);
 
