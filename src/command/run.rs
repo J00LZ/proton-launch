@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
 use crate::{paths::Paths, proton::ProtonVersion, steam::SteamData};
 
@@ -7,8 +7,15 @@ use super::{Runnable, RunnableError, RunnableResult};
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "commandline", derive(clap::Args))]
 pub struct Run {
-    /// Path to the game exe to run
-    exe: PathBuf,
+    /// Optional path to the exe of the game
+    /// If not specified, the first part of the [ARGS] will be used as the exe
+    exe: Option<PathBuf>,
+
+    /// Args to pass to the game directly
+    /// If the exe is not specified, the first part of the [ARGS] will be used as the exe
+    /// The rest of the [ARGS] will be passed to the game
+    #[cfg_attr(feature = "commandline", clap(last = true))]
+    args: Vec<String>,
 
     /// Optional save name to use
     /// If not specified, the game exe without the extension will be used
@@ -27,6 +34,20 @@ pub struct Run {
     here: bool,
 }
 
+impl Run {
+    fn get_exe_and_args(&self) -> Result<(PathBuf, &[String]), RunnableError> {
+        if let Some(exe) = &self.exe {
+            Ok((exe.clone(), &self.args))
+        } else {
+            if let Some((exe, args)) = self.args.split_first() {
+                Ok((PathBuf::from_str(exe.as_str()).unwrap(), args))
+            } else {
+                Err(RunnableError::NoExe)
+            }
+        }
+    }
+}
+
 impl Runnable for Run {
     fn run(&self, paths: &Paths, steam_data: &SteamData) -> RunnableResult<()> {
         let selected_proton = self.proton.filter(|p| p.is_installed(steam_data));
@@ -37,18 +58,21 @@ impl Runnable for Run {
         }
         let selected_proton = selected_proton.or_else(|| ProtonVersion::best_installed(steam_data));
 
+        let (exe, args) = self.get_exe_and_args()?;
+
         if let Some(selected) = selected_proton {
             let save_name = self
                 .save_name
                 .as_deref()
-                .unwrap_or_else(|| self.exe.file_stem().unwrap().to_str().unwrap());
+                .unwrap_or_else(|| exe.file_stem().unwrap().to_str().unwrap());
             let proton_path = selected.get_path(steam_data).expect("You somehow managed to delete the selected proton version while running this command");
             let proton_command = proton_path.join("proton");
-            println!("Launching {} with {}", self.exe.display(), selected);
+
+            println!("Launching {} with {}", exe.display(), selected);
 
             let compat_dir = paths.compat_dir(save_name);
             let run_dir = if self.here {
-                self.exe.parent().unwrap().to_path_buf()
+                exe.parent().unwrap().to_path_buf()
             } else {
                 paths.run_dir(save_name)
             };
@@ -58,7 +82,8 @@ impl Runnable for Run {
             command.env("STEAM_COMPAT_DATA_PATH", compat_dir);
             command.current_dir(run_dir);
             command.arg("run");
-            command.arg(&self.exe);
+            command.arg(exe);
+            command.args(args);
 
             let res = command.spawn().map_err(RunnableError::SpawnError)?.wait()?;
             println!("Exited with status {}", res);
